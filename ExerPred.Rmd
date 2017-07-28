@@ -1,0 +1,86 @@
+---
+title: "Machine Learning Prediction Assignment"
+output:
+  html_document:
+    keep_md: yes
+  pdf_document: default
+---
+## Executive Summary
+
+        I split the data into training and testing sets, with a 70% to 30% split based on classe.  I remove all of the other factor-like variables, and set the NA values to 0.  I use parallel computing and set 10 k-folds for cross-validation instead of bootstrapping all in the name of computing time savings.  I then train the model using a randomforest method with basic center and scale preprocessing.
+        We see that the model predicts the training set perfectly, and the testing set with accuracy of 99.24%.  This lead to a successful prediction of the quiz set - with 20/20 predicted correctly.
+
+
+## R Codework
+
+```{r Load mtcars data and do regression, echo=TRUE, cache=TRUE}
+
+        require(caret)
+
+        alldata<-read.csv("pml-training.csv",na.strings=c('#DIV/0', '', 'NA'),stringsAsFactors = FALSE)
+        finalpredict<-read.csv("pml-testing.csv",na.strings=c('#DIV/0', '', 'NA'),stringsAsFactors = FALSE)
+        
+        #split data into tesing and training (70%/30%)
+        set.seed(1777)
+        trainingRows<-createDataPartition(alldata$classe, p=0.7, list=FALSE)
+        training <- alldata[c(trainingRows),]
+        testing <- alldata[c(-trainingRows),]
+        
+        #trim out columns not to be used
+        training<-training[,8:160]
+        classes <- as.character(sapply(training, class))
+        colClasses <- which(classes=="character")
+        training<- cbind(training[,-colClasses], as.factor(training$classe))
+        names(training)[120]="classe"
+        #zero out NAs
+        training[is.na(training)]<-0
+        
+        
+        #set-up parallel computing and cross validation to increase speed
+        require(parallel)
+        require(doParallel)
+        cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
+        registerDoParallel(cluster)
+        fitControl <- trainControl(method = "cv",
+                           number = 10,
+                           allowParallel = TRUE)
+        
+        #train random forest
+        mod1<-train(classe~.,data=training,method="rf",preProcess=c("center","scale"),trControl=fitControl)
+        
+        #plot model
+        plot(mod1$finalModel)
+        varImpPlot(mod1$finalModel)
+        
+        #training results
+        predtrain<-predict(mod1,training)
+        confusionMatrix(predtrain,training$classe)
+        
+        
+        #put testing in same format as training
+        testing<-testing[,8:160]
+        classes <- as.character(sapply(testing, class))
+        colClasses <- which(classes=="character")
+        testing<- cbind(testing[,-colClasses], as.factor(testing$classe))
+        names(testing)[120]="classe"
+        testing[is.na(testing)]<-0
+        
+        #testing results
+        predtest<-predict(mod1,testing)
+        confusionMatrix(predtest,testing$classe)
+        
+        #final quiz predictions
+        finalpredict<-finalpredict[,8:160]
+        finalpredict[is.na(finalpredict)]<-0
+        
+        predict(mod1,finalpredict)
+        
+        #stop parallel
+        stopCluster(cluster)
+        registerDoSEQ()
+                
+```
+
+
+
+
